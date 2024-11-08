@@ -2,16 +2,53 @@ import tkinter as tk
 from tkinter import messagebox
 
 # Sample quiz data organized by sections
-quiz_data = {
-    "Section 1": [
-        {"question": "What is the word limit for the Extended Essay?", "options": ["2000 words", "1000 words", "4000 words", "500 words"], "correct": "4000 words"},
-        {"question": "What is the largest planet?", "options": ["Earth", "Jupiter", "Saturn", "Mars"], "correct": "Jupiter"}
-    ],
-    "Section 2": [
-        {"question": "Which element has the chemical symbol 'O'?", "options": ["Oxygen", "Gold", "Silver", "Helium"], "correct": "Oxygen"},
-        {"question": "What is the fastest land animal?", "options": ["Cheetah", "Lion", "Horse", "Elephant"], "correct": "Cheetah"}
-    ]
-}
+import pandas as pd
+
+# Load the CSV file and categorize questions
+file_path = 'test.csv'
+quiz_data = pd.read_csv(file_path)
+
+def categorize_questions(quiz_data):
+    sections = {
+        "Section 1": [],
+        "Section 2": [],
+        "Section 3": [],
+        "Section 4": [],
+        "Section 5": []
+    }
+
+    # Divide data into five sections with 7 questions each
+    questions_per_section = 7
+    for section_number in range(5):
+        start_index = section_number * questions_per_section
+        end_index = start_index + questions_per_section
+        section_questions = quiz_data.iloc[start_index:end_index]
+
+        section_name = f"Section {section_number + 1}"
+        for _, row in section_questions.iterrows():
+            question_dict = {
+                "question": row['Question'],
+                "options": [
+                    row['Correct Answer'],
+                    row['Wrong answer'],
+                    row['Wrong answer.1'],
+                    row['Wrong answer.2']
+                ],
+                "correct": row['Correct Answer']
+            }
+            sections[section_name].append(question_dict)
+
+    return sections
+
+
+# Organize the quiz data into sections
+quiz_sections = categorize_questions(quiz_data)
+
+# Convert CSV into a dictionary where keys are column names and values are lists of column data
+quiz_data_dict_columns = quiz_data.to_dict(orient='list')
+
+# Display the dictionary
+quiz_data_dict_columns
 
 # Leaderboard list to store player names and scores
 leaderboard = []
@@ -28,44 +65,48 @@ leaderboard = []
 def open_quiz_popup(section):
     popup = tk.Toplevel(root)
     popup.title(f"{section} Quiz")
-    popup.geometry("400x350")
+    popup.geometry("600x400")
     popup.transient(root)
     popup.grab_set()
 
-    # Track the score and current question
     score = [0]
     current_question_index = 0
     selected_answer = tk.StringVar()
 
-    # Function to load the current question with a timer
+    # Timer for the entire section: 2.5 minutes (150 seconds)
+    section_time_limit = 80
+    time_left = tk.IntVar(value=section_time_limit)
+    timer_id = None  # ID to manage the section-wide timer
+
+    def update_section_timer():
+        """Update section timer each second, and end quiz if time expires."""
+        current_time = time_left.get()
+        if current_time > 0:
+            time_left.set(current_time - 1)
+            timer_id = popup.after(1000, update_section_timer)
+        else:
+            messagebox.showwarning("Time's up!", "The section time has expired.")
+            end_quiz(score[0])  # End the quiz if section time runs out
+
+    # Start section timer
+    update_section_timer()
+
+    # Function to load the current question
     def load_question(index):
-        question_data = quiz_data[section][index]
+        global next_frame
+        next_frame = False
+        question_data = quiz_sections[section][index]
 
         # Clear previous widgets
         for widget in popup.winfo_children():
             widget.destroy()
 
-        # Timer countdown in seconds
-        countdown_time = 30  # 30 seconds for each question
-        time_left = tk.IntVar(value=countdown_time)
-
-        # Function to update the timer
-        def update_timer():
-            current_time = time_left.get()
-            if current_time > 0:
-                time_left.set(current_time - 1)
-                popup.after(1000, update_timer)  # Update every second
-            else:
-                # Time is up, move to the next question
-                messagebox.showwarning("Time's up!", "Moving to the next question.")
-                submit_answer(index, timeout=True)
-
-        # Display the question
+        # Display question and options
         label_question = tk.Label(popup, text=f"Question {index + 1}: {question_data['question']}",
                                   font=("Helvetica", 14), wraplength=350)
         label_question.pack(pady=10)
 
-        # Timer label
+        # Timer label for section timer
         timer_label = tk.Label(popup, textvariable=time_left, font=("Helvetica", 12), fg="red")
         timer_label.pack(pady=5)
 
@@ -81,12 +122,10 @@ def open_quiz_popup(section):
         submit_button = tk.Button(popup, text="Submit", command=lambda: submit_answer(index))
         submit_button.pack(pady=10)
 
-        # Start the timer
-        update_timer()
-
     # Function to submit the answer
     def submit_answer(index, timeout=False):
-        correct_answer = quiz_data[section][index]["correct"]
+        global next_frame
+        correct_answer = quiz_sections[section][index]["correct"]
 
         if timeout:
             messagebox.showinfo("Time's up!", f"The correct answer is {correct_answer}.")
@@ -98,9 +137,10 @@ def open_quiz_popup(section):
             else:
                 messagebox.showerror("Result", f"Incorrect! The correct answer is {correct_answer}.")
 
-        # Move to the next question or end the quiz
-        if index < len(quiz_data[section]) - 1:
+        # Move to the next question or end the quiz if it's the last question
+        if index < len(quiz_sections[section]) - 1:
             load_question(index + 1)
+            next_frame = False
         else:
             end_quiz(score[0])
 
@@ -109,7 +149,7 @@ def open_quiz_popup(section):
         for widget in popup.winfo_children():
             widget.destroy()
 
-        label_score = tk.Label(popup, text=f"Quiz Finished! Your score: {final_score}/{len(quiz_data[section])}",
+        label_score = tk.Label(popup, text=f"Quiz Finished! Your score: {final_score}/{len(quiz_sections[section])}",
                                font=("Helvetica", 14))
         label_score.pack(pady=10)
 
@@ -119,11 +159,9 @@ def open_quiz_popup(section):
         player_name_entry = tk.Entry(popup)
         player_name_entry.pack(pady=5)
 
-        # Submit button to save score and show leaderboard
         def submit_name():
             player_name = player_name_entry.get()
             if player_name:
-                # Append player name, score, and section to leaderboard
                 leaderboard.append((player_name, final_score, section))
                 show_leaderboard()
             popup.destroy()
@@ -161,11 +199,20 @@ def open_section_1():
 def open_section_2():
     open_quiz_popup("Section 2")
 
+def open_section_3():
+    open_quiz_popup("Section 3")
+
+def open_section_4():
+    open_quiz_popup("Section 4")
+
+def open_section_5():
+    open_quiz_popup("Section 5")
+
 # Function to open the main menu
 def open_main_menu():
     main_menu_popup = tk.Toplevel(root)
     main_menu_popup.title("TOC")
-    main_menu_popup.geometry("300x200")
+    main_menu_popup.geometry("350x300")
 
     label_title = tk.Label(main_menu_popup, text="EE Research Review", font=("Helvetica", 16))
     label_title.pack(pady=10)
@@ -176,6 +223,15 @@ def open_main_menu():
 
     section2_button = tk.Button(main_menu_popup, text="Section 2 Quiz", command=open_section_2)
     section2_button.pack(fill="x", padx=10, pady=5)
+
+    section3_button = tk.Button(main_menu_popup, text="Section 3 Quiz", command=open_section_3)
+    section3_button.pack(fill="x", padx=10, pady=5)
+
+    section4_button = tk.Button(main_menu_popup, text="Section 4 Quiz", command=open_section_4)
+    section4_button.pack(fill="x", padx=10, pady=5)
+
+    section5_button = tk.Button(main_menu_popup, text="Section 5 Quiz", command=open_section_5)
+    section5_button.pack(fill="x", padx=10, pady=5)
 
     leaderboard_button = tk.Button(main_menu_popup, text="View Leaderboard", command=show_leaderboard)
     leaderboard_button.pack(fill="x", padx=10, pady=5)
