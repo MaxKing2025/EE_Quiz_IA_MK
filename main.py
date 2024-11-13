@@ -1,7 +1,5 @@
 import tkinter as tk
 from tkinter import messagebox
-
-# Sample quiz data organized by sections
 import pandas as pd
 
 # Load the CSV file and categorize questions
@@ -40,27 +38,24 @@ def categorize_questions(quiz_data):
 
     return sections
 
-
 # Organize the quiz data into sections
 quiz_sections = categorize_questions(quiz_data)
 
-# Convert CSV into a dictionary where keys are column names and values are lists of column data
-quiz_data_dict_columns = quiz_data.to_dict(orient='list')
-
-# Display the dictionary
-quiz_data_dict_columns
-
 # Leaderboard list to store player names and scores
 leaderboard = []
+
+# Global mastery percentage and increment value
+mastery_percentage = 0.0
+increment_per_correct = 2.9411764705882  # Given increment per correct answer
+
+# Track correct answers for each question
+mastery_tracker = {q: 0 for section in quiz_sections.values() for q in range(len(section))}
+max_mastery_per_question = 5
 
 # Create the main window
 root = tk.Tk()
 root.title("Quiz with Leaderboard")
 root.geometry("400x300")
-
-# Function to open a quiz for a specific section
-leaderboard = []
-
 
 def open_quiz_popup(section):
     popup = tk.Toplevel(root)
@@ -83,7 +78,7 @@ def open_quiz_popup(section):
         current_time = time_left.get()
         if current_time > 0:
             time_left.set(current_time - 1)
-            timer_id = popup.after(1000, update_section_timer)
+            popup.after(1000, update_section_timer)
         else:
             messagebox.showwarning("Time's up!", "The section time has expired.")
             end_quiz(score[0])  # End the quiz if section time runs out
@@ -91,7 +86,7 @@ def open_quiz_popup(section):
     # Start section timer
     update_section_timer()
 
-    # Function to load the current question
+    # Define the load_question function before it is called
     def load_question(index):
         global next_frame
         next_frame = False
@@ -122,9 +117,21 @@ def open_quiz_popup(section):
         submit_button = tk.Button(popup, text="Submit", command=lambda: submit_answer(index))
         submit_button.pack(pady=10)
 
+        # Label to display mastery percentage, updated for every question popup
+        mastery_label = tk.Label(popup, text=f"Mastery: {mastery_percentage:.1f}%", font=("Helvetica", 10), fg="blue", anchor="w")
+        mastery_label.pack(side="left", padx=5, pady=5)
+
+        # Function to update mastery label based on total correct answers
+        def update_mastery_label():
+            if mastery_label.winfo_exists():  # Ensure label exists before updating
+                mastery_label.config(text=f"Mastery: {mastery_percentage:.1f}%")
+
+        # Update mastery percentage label initially for each new question
+        update_mastery_label()
+
     # Function to submit the answer
     def submit_answer(index, timeout=False):
-        global next_frame
+        global next_frame, mastery_percentage
         correct_answer = quiz_sections[section][index]["correct"]
 
         if timeout:
@@ -134,6 +141,12 @@ def open_quiz_popup(section):
             if selected == correct_answer:
                 score[0] += 1
                 messagebox.showinfo("Result", "Correct!")
+
+                # Update mastery tracker and mastery percentage for a correct answer
+                if mastery_tracker[index] < max_mastery_per_question:
+                    mastery_tracker[index] += 1
+                    mastery_percentage += increment_per_correct  # Increment by 2.9411764705882%
+
             else:
                 messagebox.showerror("Result", f"Incorrect! The correct answer is {correct_answer}.")
 
@@ -169,9 +182,8 @@ def open_quiz_popup(section):
         submit_button = tk.Button(popup, text="Submit Name", command=submit_name)
         submit_button.pack(pady=10)
 
-    # Load the first question
+    # Load the first question after defining load_question
     load_question(current_question_index)
-
 
 # Function to display the leaderboard
 def show_leaderboard():
