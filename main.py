@@ -1,4 +1,5 @@
 import tkinter as tk
+from random import random
 from tkinter import messagebox
 import pandas as pd
 
@@ -87,6 +88,7 @@ def open_quiz_popup(section):
     update_section_timer()
 
     # Define the load_question function before it is called
+    import random 
     def load_question(index):
         global next_frame
         next_frame = False
@@ -95,6 +97,11 @@ def open_quiz_popup(section):
         # Clear previous widgets
         for widget in popup.winfo_children():
             widget.destroy()
+
+        # Shuffle the options and track the new correct answer position
+            options = question_data["options"]
+            random.shuffle(options)  # Shuffle the options
+            var = question_data["correct"]
 
         # Display question and options
         label_question = tk.Label(popup, text=f"Question {index + 1}: {question_data['question']}",
